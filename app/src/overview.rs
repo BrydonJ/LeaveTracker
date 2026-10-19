@@ -125,7 +125,13 @@ pub fn Overview() -> impl IntoView {
                 }
             }
         }
-        if let Some(loss) = r.losses.iter().find(|l| l.date >= today && l.days > 0.004) {
+        if let Some(loss) = r.losses.iter().find(|l| l.date > today && l.days > 0.004) {
+            let deadline = loss.date
+                - Days::new(if loss.reason == LossReason::Expired {
+                    1
+                } else {
+                    0
+                });
             let (title, body) = match loss.reason {
                 LossReason::CarryCap => (
                     format!("{} will be forfeited on {}", fmt::plural_days(loss.days), fmt::date_med(loss.date)),
@@ -133,12 +139,19 @@ pub fn Overview() -> impl IntoView {
                         .to_string(),
                 ),
                 LossReason::Expired => (
-                    format!("{} will expire on {}", fmt::plural_days(loss.days), fmt::date_med(loss.date)),
-                    "Carried-over days that aren't used by then are lost.".to_string(),
+                    format!("Use {} by {} or lose them", fmt::plural_days(loss.days), fmt::date_med(deadline)),
+                    format!(
+                        "Leave not taken within {} months of its cycle ending is forfeited. Booked leave is already counted.",
+                        app.data.with(|d| d.settings.carry_expiry_months.unwrap_or(0))
+                    ),
                 ),
             };
             out.push(Alert {
-                tone: "critical",
+                tone: if (deadline - today).num_days() <= 60 {
+                    "critical"
+                } else {
+                    "warning"
+                },
                 icon: "alert",
                 title,
                 body,

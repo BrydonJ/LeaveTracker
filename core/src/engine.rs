@@ -748,12 +748,16 @@ mod tests {
 
     #[test]
     fn hr_email_scenario_2026() {
+        // Contract 14.2.1: 15 days + 1 per full year worked, max 20; Jan–Dec cycle;
+        // leave not taken within 6 months of the cycle's end is forfeited.
         // HR (7 Sep 2026): 17 days for 2026; 1.5 carried from 2025 used on 2 Jan and
         // 2 Mar (half); 11 days taken/booked from the 2026 allowance, incl. 24 Sep.
         let mut x = data(d(2023, 12, 4));
         x.settings.cycle = CycleBasis::Calendar;
         x.settings.credit_timing = CreditTiming::Upfront;
         x.settings.rate_basis = RateBasis::CycleStart;
+        x.settings.max_entitlement = Some(20.0);
+        x.settings.carry_expiry_months = Some(6);
         x.adjustments.push(Adjustment {
             id: 1,
             date: d(2025, 12, 31),
@@ -787,6 +791,21 @@ mod tests {
         // 24 Sep is a public holiday, so it costs nothing: HR's 6 is one day short.
         close(r.entry_days[&(id - 1)], 0.0);
         close(r.balance_on(d(2026, 12, 31)), 7.0);
+        // The 2025 carry-over was fully used before its 30 Jun 2026 deadline.
+        assert!(r.carried_today.is_empty());
+        assert!(!r.losses.iter().any(|l| l.date.year() == 2026));
+        // 2027 allowance is 18; untaken 2026 days must be used by 30 Jun 2027.
+        close(r.accrued_between(d(2027, 1, 1), d(2027, 1, 1)), 18.0);
+        let exp = r
+            .losses
+            .iter()
+            .find(|l| l.reason == LossReason::Expired && l.date.year() == 2027)
+            .unwrap();
+        assert_eq!(exp.date, d(2027, 7, 1));
+        close(exp.days, 7.0);
+        // Capped at 20: 2030 would otherwise be 21 (6 full years by 1 Jan 2030).
+        let r = compute(&x, d(2030, 6, 1), None).unwrap();
+        close(r.accrued_between(d(2030, 1, 1), d(2030, 1, 1)), 20.0);
     }
 
     #[test]
