@@ -1,0 +1,5 @@
+[build]
+target = "index.html"
+dist = "dist"
+# Relative URLs so the build works from any sub-path (e.g. GitHub Pages).
+public_url = "./"
